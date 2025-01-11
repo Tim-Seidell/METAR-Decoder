@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>METAR Decoder</title>
+</head>
+<body>
+        <input type="text" id="metarText" style="width: 100%" value="KDMA 220355Z AUTO VRB03G15KT 120V180 1 1/2SM OVC200 BKN150 SCT100 FEW050 M120/M080 A3011 RMK AO2 SLP219 T01211079 $">
+        <button onclick="return decode()">Decode</button>
+        <br>
+        <input id="takeoffTime" type="text" placeholder="Takeoff time (ZULU)" onchange="return highlightTAF()">
+        <input id="taf" value=
+        "TAF KDMA 241900Z 2419/2601 VRB06KT 9999 BKN220 QNH2990INS 
+            BECMG 2421/2422 27010KT 9999 BKN220 QNH2989INS 
+            BECMG 2505/2506 15008KT 9999 SCT270 QNH2998INS 
+            BECMG 2518/2519 33009KT 9999 BKN260 QNH3010INS TX27/2421Z TN10/2512Z" >
+
+</body>
+<script>
+    
+
+    function decode() {
+        var metarText = document.getElementById("metarText").value;
+        var metarDecoder = new MetarDecoder(metarText);
+        metarDecoder.decode();
+    }
+
+    function highlightTAF() {
+        var tafText = document.getElementById("taf").value;
+        var tafDecoder = new TAFDecoder(tafText);
+        tafDecoder.highlightTAF();
+    }
+
+    var inputElement = document.getElementById("takeoffTime");
+    
+    inputElement.addEventListener("input", function(event) {
+       highlightTAF();
+    });
+
+    class TAFDecoder {
+        tokenizedTAF = [];
+        tafText;
+
+        constructor(tafText) {
+            this.tafText = tafText;
+        }
+
+        tokenizeTAF() {
+            console.log(this.tafText.split(/\s{3}/));
+        }
+
+        highlightTAF() {
+            this.tokenizeTAF();
+        }
+    }
+
+
+    class MetarDecoder {
+        tokenizedMetar = {
+            unrecognized:[],
+            clouds:[]
+        };
+        decodedMetar = {};
+        metarText;
+        
+        constructor(metarText) {
+            this.metarText = metarText;
+        }
+
+        tokenize() {
+            var metarSplit = this.metarText.split(" ");
+            var token;
+
+            while (metarSplit.length > 0) {
+                token = metarSplit[0];
+
+                // ICAO
+                if(/^K[A-Z0-9]{3}$/m.test(token)) { this.tokenizedMetar.icao = token; } 
+
+                // Report Time
+                else if(/^[0-9]{6}Z$/m.test(token)) { this.tokenizedMetar.reportTime = token; }
+
+                // AUTO
+                else if(/^AUTO$/m.test(token)) { this.tokenizedMetar.auto = token; }
+
+
+                // Winds
+                // Normal Winds
+                else if(/^[0-9]{5}KT$/m.test(token)) {
+                    this.tokenizedMetar.windType = "normal";
+                    this.tokenizedMetar.winds = token;
+                }
+
+                // Gusty Winds
+                else if(/^[0-9]{5}G[0-9]{2}KT$/m.test(token)) {
+                    this.tokenizedMetar.windType = "gust";
+                    this.tokenizedMetar.winds = token;
+                }
+
+                // Variable winds
+                else if(/^VRB[0-9]{2}KT$/m.test(token)) {
+                    this.tokenizedMetar.windType = "variable";
+                    this.tokenizedMetar.winds = token;
+                }
+
+                // Variable gusty winds
+                else if(/^VRB[0-9]{2}G[0-9]{2}KT$/m.test(token)) {
+                    this.tokenizedMetar.windType = "variableGust";
+                    this.tokenizedMetar.winds = token;
+                }
+
+                // Varying
+                else if(/^[0-9]{3}V[0-9]{3}$/m.test(token)) {
+                    this.tokenizedMetar.varying = token;
+                }
+
+
+                // Visibility
+                // Standard Visibility
+                else if(/^[0-9]+SM$/m.test(token)) { this.tokenizedMetar.visibility = token; }
+
+                // Leading fractional visibility
+                else if(/^[0-9]$/m.test(token)) { this.tokenizedMetar.leadingVisibility = token; }
+
+                // Fractional Visibility
+                else if(/^[0-9]\/[0-9]SM$/m.test(token)) { this.tokenizedMetar.visibility = token; }
+
+                // Meters Visibility
+                else if(/^[0-9]{4}$/m.test(token)) { this.tokenizedMetar.metersVisibility = token; }
+
+                // Weather
+                else if(/^[-+]*(?:CLR|NSW|TS|FG|BR)?(?:RA|GR)*$/m.test(token)) { this.tokenizedMetar.weather = token; }
+
+                // Clouds
+                else if(/^(?:FEW|SCT|BKN|OVC)[0-9]{3}$/m.test(token)) { this.tokenizedMetar.clouds.push(token); }
+
+                // Temp/Dewpoint
+                else if(/^M?[0-9]{2,3}\/M?[0-9]{2,3}$/m.test(token)) { this.tokenizedMetar.tempdew = token; }
+
+                // Altimeter
+                else if(/^A[0-9]{4}$/m.test(token)) { this.tokenizedMetar.altimeter = token; }
+
+                // Remarks
+                else if(/^RMK$/m.test(token)) { this.tokenizedMetar.remarks = token; }
+
+                // Station type
+                else if(/^AO1|AO2$/m.test(token)) { this.tokenizedMetar.stationType = token; }
+
+                // Sea Level pressure
+                else if(/^SLP[0-9]{3}$/m.test(token)) { this.tokenizedMetar.slp = token; }
+
+                // Temp/Dew Tenths
+                else if(/^T[0-9]{8}$/m.test(token)) { this.tokenizedMetar.tempDewTenths = token; }
+
+                // Date Time
+                // else if(/^[0-9]{9}$/m.test(token)) { this.tokenizedMetar.datetime = token; }
+
+                // Maintenance
+                else if(/^\$$/m.test(token)) { this.tokenizedMetar.maintenance = token; }
+
+                else {
+                    this.tokenizedMetar.unrecognized.push(token)
+                    console.log("Did not recognize: \"" + token + "\"");
+                }
+
+                metarSplit.shift();
+            }
+            console.log("Tokenized " + JSON.stringify(this.tokenizedMetar, null, 2));
+        }
+
+        decode() {
+            this.tokenize();
+
+            // ICAO
+            this.decodedMetar.icao = this.tokenizedMetar.icao
+            
+            // Report Day/Time
+            const reportTime = Array.from(this.tokenizedMetar.reportTime.matchAll(/([0-9]{2})([0-9]{4})Z/g))[0];
+            this.decodedMetar.reportDay = reportTime[1];
+            this.decodedMetar.reportTime = reportTime[2];
+
+            // Auto generated
+            this.decodedMetar.auto = this.tokenizedMetar.auto;
+
+            // Winds
+            const windType = this.tokenizedMetar.windType;
+            if(windType == "normal") {
+                const winds = Array.from(this.tokenizedMetar.winds.matchAll(/([0-9]{3})([0-9]{2})KT/g))[0];
+                this.decodedMetar.windDirection = winds[1];
+                this.decodedMetar.windIntensity = winds[2];
+            }
+
+            else if(windType == "gust") {
+                const winds = Array.from(this.tokenizedMetar.winds.matchAll(/([0-9]{3})([0-9]{2})G([0-9]{2})KT/g))[0];
+                this.decodedMetar.windDirection = winds[1];
+                this.decodedMetar.windIntensity = winds[2];
+                this.decodedMetar.gustIntensity = winds[3];
+            }
+
+            else if(windType == "variableGust") {
+                const winds = Array.from(this.tokenizedMetar.winds.matchAll(/VRB([0-9]{2})G([0-9]{2})KT/g))[0];
+                this.decodedMetar.windDirection = "VRB";
+                this.decodedMetar.windIntensity = winds[1];
+                this.decodedMetar.gustIntensity = winds[2];
+            }
+
+            else { // Variable
+                const winds = Array.from(this.tokenizedMetar.winds.matchAll(/VRB([0-9]{2})KT/g))[0];
+                this.decodedMetar.windDirection = "VRB";
+                this.decodedMetar.windIntensity = winds[1];
+            }
+
+            // Varying
+            if(this.tokenizedMetar.hasOwnProperty("varying")) {
+                const winds = Array.from(this.tokenizedMetar.varying.matchAll(/([0-9]{3})V([0-9]{3})/g))[0];
+                this.decodedMetar.minWindVar = winds[1];
+                this.decodedMetar.maxWindVar = winds[2];
+            }
+
+            // Visibility
+            const leading = this.tokenizedMetar.hasOwnProperty("leadingVisibility") ? this.tokenizedMetar.leadingVisibility + " " : "";
+            var visibility = this.tokenizedMetar.hasOwnProperty("metersVisibility") ? this.tokenizedMetar.metersVisibility : leading + this.tokenizedMetar.visibility;
+            this.decodedMetar.visibility = visibility.replace("SM", "");
+
+            // Weather
+
+
+            // Clouds
+            this.decodedMetar.clouds = [];
+            for(var layer in this.tokenizedMetar.clouds) {
+                var clouds = Array.from(this.tokenizedMetar.clouds[layer].matchAll(/^(FEW|SCT|BKN|OVC)([0-9]{3})$/g))[0];
+                clouds[1] = clouds[1].replace("FEW", "Few").replace("SCT", "Scattered").replace("BKN", "Broken").replace("OVC", "Overcast");
+                clouds[2] = parseInt(clouds[2] + "00");
+                // clouds[2] = clouds[2].toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+                this.decodedMetar.clouds.push({"type": clouds[1], "altitude": clouds[2]});
+            }
+
+            // Temp Dewpoint
+            const tempDew = Array.from(this.tokenizedMetar.tempdew.matchAll(/^(M?[0-9]{2,3})\/(M?[0-9]{2,3})$/g))[0];
+            this.decodedMetar.temperature = tempDew[1][0] == "M" ? parseInt(tempDew[1].substring(1) * -1) : parseInt(tempDew[1]);
+            this.decodedMetar.dewpoint = tempDew[2][0] == "M" ? parseInt(tempDew[2].substring(1) * -1) : parseInt(tempDew[2]);
+
+            // Altimeter
+            const altimeter = Array.from(this.tokenizedMetar.altimeter.matchAll(/^A([0-9]{4})$/g))[0];
+            this.decodedMetar.altimeter = parseFloat(altimeter[1]) / 100;
+
+            // Remarks
+            this.decodedMetar.remarks = this.tokenizedMetar.remarks;
+
+            // Station Type
+            this.decodedMetar.stationType = this.tokenizedMetar.stationType == "AO1" ? "Automatic, no precipitation discriminator" : "Automatic with precipitation discriminator";
+
+            // Sea level pressure
+            const slp = Array.from(this.tokenizedMetar.slp.matchAll(/^SLP([0-9]{3})$/g))[0];
+            this.decodedMetar.slp = parseFloat(slp[1]) >= 500.0 ? parseFloat("9" + slp[1]) / 10.0 : parseFloat("10" + slp[1]) / 10.0;
+            
+            // Temp Dew Tenths
+            const tempDewTenths = Array.from(this.tokenizedMetar.tempDewTenths.matchAll(/^T([0-9])([0-9]{3})([0-9])([0-9]{3})/g))[0];
+            var tempTenths = parseFloat(tempDewTenths[2]) / 10.0;
+            var dewTenths = parseFloat(tempDewTenths[4]) / 10.0;
+            this.decodedMetar.tempTenths = parseFloat(tempDewTenths[1]) == 0 ? tempTenths : tempTenths * -1;
+            this.decodedMetar.dewTenths = parseFloat(tempDewTenths[2]) == 0 ? dewTenths : dewTenths * -1;
+
+            // Maintenance
+            if(this.tokenizedMetar.hasOwnProperty("maintenance")) {
+                this.decodedMetar.maintenance = "Weather station requires maintenance";
+            }
+
+
+            console.log("Decoded " + JSON.stringify(this.decodedMetar, null, 2));
+        }
+    }
+    
+</script>
+</html>
